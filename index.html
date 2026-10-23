@@ -290,19 +290,39 @@ fromSelect.addEventListener('change',()=>toggleCustom(fromSelect,'fromCustomWrap
 toSelect.addEventListener('change',()=>toggleCustom(toSelect,'toCustomWrap','toCustom'));
 function copyText(text){if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(text);const area=document.createElement('textarea');area.value=text;area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();let ok=false;try{ok=document.execCommand('copy')}catch{}area.remove();return ok?Promise.resolve():Promise.reject();}
 let latestRequest='';
-document.getElementById('bookingForm').addEventListener('submit',e=>{e.preventDefault();const get=id=>document.getElementById(id).value.trim();const from=get('from')==='Інше місто або адреса'?get('fromCustom'):get('from');const to=get('to')==='Інше місто або адреса'?get('toCustom'):get('to');const fmtDate=value=>{if(!value)return 'Не вказано';const [y,m,d]=value.split('-');return `${d}.${m}.${y}`};latestRequest=`Заявка Panda Bus Comfort
-
-Тип запиту: ${get('kind')}
-Звідки: ${from}
-Куди: ${to}
-Дата поїздки: ${fmtDate(get('date'))}
-Дата зворотної поїздки: ${fmtDate(get('returnDate'))}
-Кількість пасажирів: ${get('passengers')}
-Як відповісти: ${get('contactMethod')}
-Контакт клієнта: ${get('contact')}
-Додаткові деталі: ${get('note')||'Не вказано'}
-
-Будь ласка, підтвердіть можливість поїздки, розклад і вартість.`;const status=document.getElementById('formStatus');status.replaceChildren();const messagePreview=document.createElement('div');messagePreview.textContent=latestRequest+'\n\nЗаявка готова. Оберіть, як її надіслати.';status.appendChild(messagePreview);const actions=document.createElement('div');actions.className='status-actions';const tg=document.createElement('a');tg.href='https://t.me/share/url?url=&text='+encodeURIComponent(latestRequest);tg.target='_blank';tg.rel='noopener';tg.textContent='Надіслати через Telegram';const wa=document.createElement('a');wa.href='https://wa.me/380685022713?text='+encodeURIComponent(latestRequest);wa.target='_blank';wa.rel='noopener';wa.textContent='Надіслати через WhatsApp';const vb=document.createElement('a');vb.href='viber://chat?number=%2B380685022713';vb.textContent='Відкрити Viber';vb.addEventListener('click',()=>{copyText(latestRequest).catch(()=>{});});const cp=document.createElement('a');cp.href='#formStatus';cp.textContent='Скопіювати текст заявки';cp.addEventListener('click',async ev=>{ev.preventDefault();try{await copyText(latestRequest);cp.textContent='Текст скопійовано';}catch{cp.textContent='Виділіть і скопіюйте текст вище';}});actions.append(tg,wa,vb,cp);status.appendChild(actions);status.style.display='block';status.scrollIntoView({behavior:'smooth',block:'nearest'});});
+document.getElementById('bookingForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const form=e.currentTarget;
+  if(!form.reportValidity())return;
+  const get=id=>document.getElementById(id).value.trim();
+  const from=get('from')==='Інше місто або адреса'?get('fromCustom'):get('from');
+  const to=get('to')==='Інше місто або адреса'?get('toCustom'):get('to');
+  const payload={kind:get('kind'),from,to,date:get('date'),returnDate:get('returnDate'),passengers:get('passengers'),contactMethod:get('contactMethod'),contact:get('contact'),note:get('note')};
+  const fmtDate=value=>{if(!value)return 'Не вказано';const [y,m,d]=value.split('-');return `${d}.${m}.${y}`};
+  const requestText=`Заявка Panda Bus Comfort\n\nТип запиту: ${payload.kind}\nЗвідки: ${from}\nКуди: ${to}\nДата поїздки: ${fmtDate(payload.date)}\nДата зворотної поїздки: ${fmtDate(payload.returnDate)}\nКількість пасажирів: ${payload.passengers}\nЯк відповісти: ${payload.contactMethod}\nКонтакт клієнта: ${payload.contact}\nДодаткові деталі: ${payload.note||'Не вказано'}\n\nБудь ласка, підтвердіть можливість поїздки, розклад і вартість.`;
+  const status=document.getElementById('formStatus');
+  status.replaceChildren();
+  const preview=document.createElement('div');
+  preview.textContent='Відправляємо заявку менеджеру Panda Bus Comfort…';
+  status.appendChild(preview);
+  status.style.display='block';
+  status.scrollIntoView({behavior:'smooth',block:'nearest'});
+  const actions=document.createElement('div');actions.className='status-actions';
+  try{
+    const response=await fetch('/api/booking',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const result=await response.json();
+    if(!response.ok||!result.ok)throw new Error(result.error||'Не вдалося надіслати');
+    preview.textContent=`✅ Заявку ${result.requestId} надіслано менеджеру!\n\nДякуємо, що обрали Panda Bus Comfort 🐼 Менеджер має підтвердити дату, наявність місць і вартість. Це ще не є підтвердженням бронювання.`;
+    form.reset();
+    document.getElementById('fromCustomWrap').hidden=true;document.getElementById('toCustomWrap').hidden=true;
+    document.getElementById('fromCustom').required=false;document.getElementById('toCustom').required=false;
+  }catch(error){
+    preview.textContent='⚠️ Не вдалося автоматично надіслати заявку. Ви можете передати її менеджеру вручну:';
+    const tg=document.createElement('a');tg.href='https://t.me/share/url?url=&text='+encodeURIComponent(requestText);tg.target='_blank';tg.rel='noopener';tg.textContent='Надіслати через Telegram';
+    const wa=document.createElement('a');wa.href='https://wa.me/380685022713?text='+encodeURIComponent(requestText);wa.target='_blank';wa.rel='noopener';wa.textContent='Надіслати через WhatsApp';
+    actions.append(tg,wa);status.appendChild(actions);
+  }
+});
 document.querySelectorAll('[data-airport]').forEach(button=>button.addEventListener('click',()=>{const value=button.dataset.airport;toSelect.value=value;if(!toSelect.value){const option=document.createElement('option');option.value=value;option.textContent=value;toSelect.appendChild(option);toSelect.value=value;}document.getElementById('kind').value='Трансфер до аеропорту';document.getElementById('booking').scrollIntoView({behavior:'smooth'});}));
 
 // Show a brief branded intro, then reveal the page.
